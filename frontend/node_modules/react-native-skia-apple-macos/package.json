@@ -1,0 +1,22 @@
+{
+  "name": "react-native-skia-apple-macos",
+  "version": "144.3.0",
+  "description": "Skia prebuilt binaries for macOS (arm64 + x64)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wcandillon/react-native-skia-binaries.git",
+    "directory": "dist/react-native-skia-apple-macos"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "libs/**"
+  ],
+  "skia": {
+    "version": "m144c",
+    "platform": "apple",
+    "graphite": false
+  }
+}

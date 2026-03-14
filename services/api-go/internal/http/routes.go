@@ -1,0 +1,27 @@
+package http
+
+import(
+  "github.com/gin-gonic/gin"
+  "github.com/jackc/pgx/v5/pgxpool"
+
+  "changenow/api-go/internal/http/handlers"
+  "changenow/api-go/internal/http/middleware"
+)
+
+func RegisterRoutes(r *gin.Engine, db *pgxpool.Pool){
+  h := handlers.New(db)
+
+  v1 := r.Group("/v1")
+  {
+    v1.POST("/auth/register", h.Register)
+    v1.POST("/auth/login", h.Login)
+
+    auth := v1.Group("/")
+    auth.Use(middleware.AuthRequired())
+    {
+      auth.POST("/plans/generate", h.GeneratePlanMock)
+      auth.GET("/tasks/:id", h.GetTask)
+      auth.GET("/plans/:id", h.GetPlan)
+    }
+  }
+}
