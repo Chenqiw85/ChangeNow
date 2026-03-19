@@ -38,7 +38,15 @@ func (h *Handlers) Register(c *gin.Context) {
     return
   }
 
-  c.JSON(http.StatusCreated, gin.H{"id": id, "email": req.Email})
+  secret := os.Getenv(("JWT_SECRET"))
+  claims := jwt.MapClaims{
+    "user_id": id,
+    "exp": time.Now().Add(24*time.Hour).Unix(),
+  }
+  token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+  signed, _ := token.SignedString([]byte(secret))
+
+  c.JSON(http.StatusCreated, gin.H{"id": id, "email": req.Email, "access_token": signed})
 }
 
 type loginReq struct {
@@ -76,6 +84,5 @@ func (h *Handlers) Login(c *gin.Context) {
   }
   token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
   signed, _ := token.SignedString([]byte(secret))
-
   c.JSON(http.StatusOK, gin.H{"access_token": signed})
 }

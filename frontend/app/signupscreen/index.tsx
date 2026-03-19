@@ -1,25 +1,39 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef,useCallback } from "react";
 import { Text, TextInput, View, StyleSheet, Pressable, Animated, Platform } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useFonts, BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import { supabase } from '@/lib/supabase'; 
+import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 
 
-const API_URL = "http://localhost:4000";
+const API_URL = "http://localhost:8080";
 
 export default function SignupScreen() {
   const router = useRouter();
+  const { register } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, confirmSetPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
 
-  const loginScaleAnim = useRef(new Animated.Value(1)).current;
   const signupScaleAnim = useRef(new Animated.Value(1)).current;
+
+  
+
+  useFocusEffect(
+  useCallback(() => {
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setError("");
+  }, [])
+);
 
   const [fontsLoaded] = useFonts({
         BebasNeue_400Regular,
@@ -29,16 +43,15 @@ export default function SignupScreen() {
         return null;
     }
 
-  const handleSignupPressIn = () => {
-      Animated.spring(signupScaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
-  };
-  const handleSignupPressOut = () => {
-      Animated.spring(signupScaleAnim, { toValue: 1, useNativeDriver: true }).start();
-  };
 
   const handleSignup = async () => {
     setError("");
 
+
+    if (!email.trim()) {
+      setError("Please enter an email address");
+      return;
+    }
     // Confirm password check
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -51,49 +64,20 @@ export default function SignupScreen() {
     }
 
     try {
-          const response = await fetch(`${API_URL}/auth/signup`, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({email, password}),
-          });
-
-          const userData = await response.json();
-          
-          //if response isnt 200 - success
-          if (!response.ok) {
-              console.log('Signup Failed', userData);
-              return;
-          }
-          
-          if (Platform.OS != "web") {
-
-          await SecureStore.setItemAsync('authToken', userData.token);
-          console.log('Signup Success, token saved');
-          router.push("/screens/maindashboard");  
-
-
-
-          } else {
-              //currently we cant handle storing web tokens, only mobile
-              //maybe i will implement for testing purposes but for now skipping
-              console.log('Signup Successful, token not saved because not using mobile OS')
-              router.push("/screens/maindashboard");  
-          }
-
-          //Add nav for workout page
-
-
+      await register(email.trim(), password);
       } catch (error) {
-          console.log('Network Error', error);
+          const apiErr = error as ApiError;
+          setError(apiErr.message || "Signup failed. Please try again.");
+      }finally{
+        setLoading(false);
       }
     }
     
-  return (
+   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sign Up</Text>
-        <View style = {styles.inputContainer}>
+
+      <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -102,6 +86,7 @@ export default function SignupScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
@@ -110,36 +95,49 @@ export default function SignupScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
           placeholder="Confirm Password"
           placeholderTextColor="#666"
           value={confirmPassword}
-          onChangeText={confirmSetPassword}
+          onChangeText={setConfirmPassword}
           secureTextEntry
+          editable={!loading}
         />
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-
-      <Animated.View style={{ transform: [{scale: signupScaleAnim }]}}>
-        <Pressable 
-            style={({pressed}) => [
-              styles.signupButton,
-              signupHovered && styles.signupButtonHovered,
-              pressed && styles.signupButtonHovered,
-            ]}
-            onPress={handleSignup}
-            onPressIn={handleSignupPressIn}
-            onPressOut={handleSignupPressOut}
-            onHoverIn={() => setSignupHovered(true)}
-            onHoverOut={() => setSignupHovered(false)}
-            >
-          <Text style={styles.signupButtonText}>Create Account</Text>
+      <Animated.View style={{ transform: [{ scale: signupScaleAnim }] }}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.signupButton,
+            signupHovered && styles.signupButtonHovered,
+            pressed && styles.signupButtonHovered,
+            loading && styles.buttonDisabled,
+          ]}
+          onPress={handleSignup}
+          onPressIn={() => {
+            Animated.spring(signupScaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+          }}
+          onPressOut={() => {
+            Animated.spring(signupScaleAnim, { toValue: 1, useNativeDriver: true }).start();
+          }}
+          onHoverIn={() => setSignupHovered(true)}
+          onHoverOut={() => setSignupHovered(false)}
+          disabled={loading}
+        >
+          <Text style={styles.signupButtonText}>
+            {loading ? "Creating Account..." : "Create Account"}
+          </Text>
         </Pressable>
       </Animated.View>
+
+      <Pressable onPress={() => router.back()} disabled={loading}>
+        <Text style={styles.backLink}>Already have an account? Log in</Text>
+      </Pressable>
     </View>
   );
 }
@@ -153,18 +151,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 48,
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: "BebasNeue_400Regular",
     fontWeight: "bold",
     margin: 40,
     color: "#ffffff",
-  },
-  input: {
-    backgroundColor: "#f5f5f5",
-    color: "#000000",
-    padding: 10,
-    marginBottom: 20,
-    width: "100%",
-    borderRadius: 8,
   },
   inputContainer: {
     backgroundColor: "#616569",
@@ -177,6 +167,21 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignSelf: "center",
   },
+  input: {
+    backgroundColor: "#f5f5f5",
+    color: "#000000",
+    padding: 10,
+    marginBottom: 20,
+    width: "100%",
+    borderRadius: 8,
+  },
+  errorText: {
+    color: "#ff4444",
+    fontSize: 14,
+    marginBottom: 12,
+    width: "80%",
+    textAlign: "center",
+  },
   signupButton: {
     backgroundColor: "#000000",
     padding: 16,
@@ -188,19 +193,15 @@ const styles = StyleSheet.create({
   signupButtonText: {
     fontSize: 20,
     fontWeight: "bold",
-    fontFamily: 'BebasNeue_400Regular',
+    fontFamily: "BebasNeue_400Regular",
     color: "#f5f5f5",
   },
-  signupButtonHovered: {
-    backgroundColor: "#222222",
-  },
-  errorText: {
-    color: "#ff4444",
+  signupButtonHovered: { backgroundColor: "#222222" },
+  buttonDisabled: { opacity: 0.6 },
+  backLink: {
+    color: "#aaa",
+    marginTop: 20,
     fontSize: 14,
-    marginTop: 8,        
-    marginBottom: 8,
-    width: "80%",        
-    textAlign: "center",
-},
+    textDecorationLine: "underline",
+  },
 });
-

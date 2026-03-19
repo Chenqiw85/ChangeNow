@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # API Keys
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    deepseek_api_key: str = ""
 
     # Provider priority (comma-separated)
     llm_provider_priority: str = "openai,anthropic"
@@ -15,13 +16,14 @@ class Settings(BaseSettings):
     # Model defaults
     openai_model: str = "gpt-4o"
     anthropic_model: str = "claude-sonnet-4-20250514"
+    deepseek_model: str = "deepseek-chat"
 
     # Service
     ai_service_port: int = 8001
     log_level: str = "INFO"
 
     # Prompt config
-    prompt_dir: str = "app/prompts/templates"
+    prompt_dir: str = "app/prompts"
 
     class Config:
         env_file = ".env"

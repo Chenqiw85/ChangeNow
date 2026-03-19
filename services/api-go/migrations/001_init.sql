@@ -9,7 +9,7 @@ create table if not exists users(
 --task
 create type task_status as enum('pending','running','done','failed');
 
-create table if not exists task(
+create table if not exists tasks(
     id uuid primary key,
     user_id bigint not null REFERENCES users(id) on delete cascade,
     status task_status NOT NULL DEFAULT 'pending',

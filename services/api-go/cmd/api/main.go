@@ -9,12 +9,14 @@ import(
     "github.com/joho/godotenv"
     "github.com/jackc/pgx/v5/pgxpool"
 
+	"changenow/api-go/internal/ai"
     "changenow/api-go/internal/http"
 )
 
 func main()  {
 	_ = godotenv.Load();
 
+	//Database
 	dbURL := os.Getenv("DATABASE_URL")
 
 	if dbURL == "" {
@@ -27,8 +29,26 @@ func main()  {
 	}
 	defer pool.Close()
 
+	//AI services
+	aiURL := os.Getenv("AI_SERVICE_URL")
+	if aiURL == "" {
+		aiURL = "http://localhost:8001"
+	}
+	aiClient := ai.NewClient(aiURL)
+
+
+	// check if AI service is reachable at startup
+	if err := aiClient.Health(context.Background()); err != nil {
+		log.Printf("WARNING: AI service not reachable: %v", err)
+		log.Printf("The API will start, but plan generation will fail until AI service is up")
+	} else {
+		log.Println("AI service connected successfully")
+	}
+
+
+	//Router
 	r:= gin.Default()
-	http.RegisterRoutes(r,pool)
+	http.RegisterRoutes(r,pool,aiClient)
 
 	port := os.Getenv("PORT")
 	if port == ""{

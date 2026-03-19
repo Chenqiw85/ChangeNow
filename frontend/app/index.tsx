@@ -4,11 +4,16 @@ import { useRouter } from "expo-router";
 import { useFonts, BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { colors, spacing, fontSize, borderRadius } from "@/lib/theme";
+
+import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
+
 
 import { supabase } from '@/lib/supabase'; 
 
 
-const API_URL = "http://localhost:4000";
+const API_URL = "http://localhost:8080";
 
 export default function LoginScreen() {
 
@@ -21,11 +26,16 @@ export default function LoginScreen() {
     
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+
+
+    const { login } = useAuth();
+    const router = useRouter();
 
 
     const [loginHovered, setLoginHovered] = useState(false);
     const [signupHovered, setSignupHovered] = useState(false);
-    const router = useRouter();
 
     const loginScaleAnim = useRef(new Animated.Value(1)).current;
     const signupScaleAnim = useRef(new Animated.Value(1)).current;
@@ -38,54 +48,31 @@ export default function LoginScreen() {
         return null;
     }
 
-    const handleLoginPressIn = () => {
+    const handlePressIn = (anim: Animated.Value) => {
         Animated.spring(loginScaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
     };
-    const handleLoginPressOut = () => {
+    const handlePressOut = (anim: Animated.Value) => {
         Animated.spring(loginScaleAnim, { toValue: 1, useNativeDriver: true }).start();
     };
 
-    const handleSignupPressIn = () => {
-        Animated.spring(signupScaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
-    };
-    const handleSignupPressOut = () => {
-        Animated.spring(signupScaleAnim, { toValue: 1, useNativeDriver: true }).start();
-    };
 
     const handleLogin = async () => {
-        console.log('log in clicked');
+
+        setError("");
         //check if required fields are filled
         if ( !setEmail || !setPassword ) {
-            return console.log('Error with credentails');
+            return console.log("Please enter both email and password");
         }
 
+        setLoading(true);
         //take input and format into request
         try {
-            console.log('request sent to server');
-            const request = await fetch(`${API_URL}/auth/login`, {
-                method: 'POST',
-                headers: {
-                'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({email, password})
-            });
-            if (!request.ok){
-                return console.log(`Error: ${request.status}`);
-            }
-
-            console.log(`response code from frontend: ${request.status}`);
-            const java_obj_response = await request.json();
-            const json_response = JSON.stringify(java_obj_response);
-            console.log(`response: ${json_response}`);
-            console.log('response recieved');
-            //store token from json in secure storage on client (keychain)
-            //SecureStore.setItemAsync('user_token', json_response);
-            router.push('/screens/maindashboard'); 
-            return console.log("Login Success!, token stored (on mobile, not web)");
-
-
+            await login(email.trim(), password);
         } catch (error) {
-            return console.log(`error: ${error}`);
+            const apiErr = error as ApiError;
+            setError(apiErr.message || "Login failed. Please try again.");
+        } finally{
+            setLoading(false);
         }
 
 
@@ -104,121 +91,159 @@ export default function LoginScreen() {
  
     
     return (
-        <View style = {styles.container}>
-            <Text style = {styles.title}>ChangeNow</Text>
-            
-        <View style = {styles.inputContainer}>
-            <TextInput
-                style = {styles.input}
-                placeholder = "Email"
-                placeholderTextColor="#666"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-            />
-            <TextInput
-                style={styles.input}
-                placeholder = "Password"
-                placeholderTextColor = "#666"
-                value = {password}
-                onChangeText = {setPassword}
-                secureTextEntry/>
-        </View>   
-        
-            <Animated.View style={{ transform: [{ scale: loginScaleAnim }] }}>
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.loginButton,
-                        loginHovered && styles.loginButtonHovered,
-                        pressed && styles.loginButtonPressed,
-                    ]}
-                    onPress={handleLogin}
-                    onPressIn={handleLoginPressIn}
-                    onPressOut={handleLoginPressOut}
-                    onHoverIn={() => setLoginHovered(true)}
-                    onHoverOut={() => setLoginHovered(false)}
-                >
-                    <Text style={styles.loginButtonText}>Log In</Text>
-                </Pressable>
-            </Animated.View>
+    <View style={s.container}>
+      <Text style={s.title}>ChangeNow</Text>
+      <Text style={s.subtitle}>Your fitness journey starts here</Text>
 
-             <Animated.View style={{ transform: [{ scale: signupScaleAnim }] }}>
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.loginButton,
-                        signupHovered && styles.loginButtonHovered,
-                        pressed && styles.loginButtonPressed,
-                    ]}
-                    onPress={handleSignup}
-                    onPressIn={handleSignupPressIn}
-                    onPressOut={handleSignupPressOut}
-                    onHoverIn={() => setSignupHovered(true)}
-                    onHoverOut={() => setSignupHovered(false)}
-                >
-                    <Text style={styles.loginButtonText}>Sign Up</Text>
-                </Pressable>
-            </Animated.View>
-        
-        </View>
-    );
+      <View style={s.inputContainer}>
+        <TextInput
+          style={s.input}
+          placeholder="Email"
+          placeholderTextColor={colors.textMuted}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          editable={!loading}
+        />
+        <TextInput
+          style={s.input}
+          placeholder="Password"
+          placeholderTextColor={colors.textMuted}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          editable={!loading}
+        />
+      </View>
+
+      {error ? <Text style={s.errorText}>{error}</Text> : null}
+
+      <Animated.View style={{ transform: [{ scale: loginScaleAnim }] }}>
+        <Pressable
+          style={({ pressed }) => [
+            s.primaryButton,
+            (loginHovered || pressed) && s.primaryButtonPressed,
+            loading && s.buttonDisabled,
+          ]}
+          onPress={handleLogin}
+          onPressIn={() => handlePressIn(loginScaleAnim)}
+          onPressOut={() => handlePressOut(loginScaleAnim)}
+          onHoverIn={() => setLoginHovered(true)}
+          onHoverOut={() => setLoginHovered(false)}
+          disabled={loading}
+        >
+          <Text style={s.primaryButtonText}>
+            {loading ? "Logging in..." : "Log In"}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View style={{ transform: [{ scale: signupScaleAnim }] }}>
+        <Pressable
+          style={({ pressed }) => [
+            s.secondaryButton,
+            (signupHovered || pressed) && s.secondaryButtonPressed,
+          ]}
+          onPress={() => router.push("/signupscreen")}
+          onPressIn={() => handlePressIn(signupScaleAnim)}
+          onPressOut={() => handlePressOut(signupScaleAnim)}
+          onHoverIn={() => setSignupHovered(true)}
+          onHoverOut={() => setSignupHovered(false)}
+          disabled={loading}
+        >
+          <Text style={s.secondaryButtonText}>Create Account</Text>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
 }
-const styles = StyleSheet.create({
-    input: {
-        backgroundColor: "#f5f5f5",
-        color: "#000000",
-        padding: 10,
-        marginBottom: 20,
-        width: "100%",
-        borderRadius: 8,
-    },
-    inputContainer: {
-        backgroundColor: "#616569",
-        borderRadius: 20,
-        padding: 20,
-        width: "80%",
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: "#363636",
-        overflow: "hidden",
-        alignSelf: "center",
-    },
-    container: {
-        flex: 1,
-        justifyContent: "flex-start",
-        alignItems: "center",
-        backgroundColor: "#48494b"
 
-    },
-    title: {
-        fontSize: 40,
-        fontFamily: 'BebasNeue_400Regular',
-        fontWeight: "bold",
-        margin: 40,
-        color: "#ffffff",
-        alignSelf: "center",
-  
-    },
-    loginButtonText: {
-        fontSize: 25,
-        fontWeight: "bold",
-        fontFamily: 'BebasNeue_400Regular',
-        color: "#f5f5f5"
-    
-    },
-    loginButton: {
-        backgroundColor: "#000000",
-        padding: 20,
-        width: 200,
-        alignItems: "center",
-        borderRadius: 50,
-        margin: 10
-    },
-    loginButtonHovered: {
-        backgroundColor: "#222222",
-    },
-    loginButtonPressed: {
-        backgroundColor: "#333333",
-        transform: [{ scale: 0.95 }],
-    },
+const s = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.lg,
+  },
+  title: {
+    fontSize: fontSize.title,
+    fontFamily: "BebasNeue_400Regular",
+    color: colors.primary,
+    letterSpacing: 2,
+  },
+  subtitle: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xl,
+  },
+  inputContainer: {
+    backgroundColor: colors.bgCard,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    width: "100%",
+    maxWidth: 400,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  input: {
+    backgroundColor: colors.bgInput,
+    color: colors.text,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    width: "100%",
+    borderRadius: borderRadius.sm,
+    fontSize: fontSize.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: fontSize.sm,
+    marginBottom: spacing.md,
+    textAlign: "center",
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: borderRadius.full,
+    marginTop: spacing.sm,
+    minWidth: 200,
+    alignItems: "center",
+  },
+  primaryButtonPressed: {
+    backgroundColor: colors.primaryDark,
+  },
+  primaryButtonText: {
+    fontSize: fontSize.lg,
+    fontWeight: "bold",
+    fontFamily: "BebasNeue_400Regular",
+    color: colors.text,
+    letterSpacing: 1,
+  },
+  secondaryButton: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: borderRadius.full,
+    marginTop: spacing.sm,
+    minWidth: 200,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  secondaryButtonPressed: {
+    backgroundColor: "rgba(233, 69, 96, 0.1)",
+  },
+  secondaryButtonText: {
+    fontSize: fontSize.lg,
+    fontWeight: "bold",
+    fontFamily: "BebasNeue_400Regular",
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+  buttonDisabled: { opacity: 0.6 },
 });

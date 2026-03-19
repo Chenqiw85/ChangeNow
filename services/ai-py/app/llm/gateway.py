@@ -23,6 +23,7 @@ from app.llm.models import (
 from app.llm.providers.base import BaseLLMProvider
 from app.llm.providers.openai import OpenAIProvider
 from app.llm.providers.anthropic import AnthropicProvider
+from app.llm.providers.deepseek import DeepSeekProvider
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 _PROVIDER_REGISTRY: dict[str, type[BaseLLMProvider]] = {
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
+    "deepseek": DeepSeekProvider,
 }
 
 

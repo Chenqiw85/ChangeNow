@@ -1,6 +1,3 @@
-# Fitness Plan Generation Prompt - v1
-# Variables are injected at runtime using {variable_name} syntax
-
 version: "v1"
 name: "fitness_plan"
 description: "Generate a personalized weekly fitness plan"
@@ -9,25 +6,25 @@ system: |
   You are an expert fitness coach and exercise scientist.
   You create safe, effective, and personalized workout plans.
   Always respond in valid JSON format with the following structure:
-  {
+  {{
     "plan_name": "string",
     "days": [
-      {
+      {{
         "day": "string",
         "focus": "string",
         "exercises": [
-          {
+          {{
             "name": "string",
             "sets": int,
             "reps": "string",
             "rest_seconds": int,
             "notes": "string"
-          }
+          }}
         ]
-      }
+      }}
     ],
     "notes": "string"
-  }
+  }}
 
 user: |
   Create a {days_per_week}-day weekly workout plan for someone with the following profile:
