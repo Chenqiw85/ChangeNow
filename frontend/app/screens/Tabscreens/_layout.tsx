@@ -48,6 +48,13 @@ export default function TabLayout() {
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>➕</Text>,
         }}
       />
+       <Tabs.Screen
+        name="plangenerate"
+        options={{
+          title: "AI Plan",
+          tabBarIcon: () => <Text style={{ fontSize: 18 }}>🤖</Text>,
+        }}
+      />
       <Tabs.Screen
         name="selectedexercise"
         options={{

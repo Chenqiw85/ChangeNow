@@ -23,12 +23,6 @@ export default function SelectedExerciseScreen() {
   const [error, setError] = useState("");
 
 
-  const [newSets, setNewSets] = useState<
-    { weight: string; reps: string }[]
-  >([{ weight: "", reps: "" }]);
-  const [submitting, setSubmitting] = useState(false);
-
-
   const loadHistory = async () => {
     try {
       setLoading(true);

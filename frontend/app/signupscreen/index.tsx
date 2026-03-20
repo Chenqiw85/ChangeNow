@@ -1,12 +1,12 @@
-import React, { useState, useRef,useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Text, TextInput, View, StyleSheet, Pressable, Animated, Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useFonts, BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
-import { supabase } from '@/lib/supabase'; 
+import { supabase } from '@/lib/supabase';
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
-
+import { colors, spacing, fontSize, borderRadius } from "@/lib/theme";
 
 const API_URL = "http://localhost:8080";
 
@@ -24,24 +24,10 @@ export default function SignupScreen() {
 
   const signupScaleAnim = useRef(new Animated.Value(1)).current;
 
-  
 
-  useFocusEffect(
-  useCallback(() => {
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setError("");
-  }, [])
-);
+  const [fontsLoaded] = useFonts({ BebasNeue_400Regular, });
 
-  const [fontsLoaded] = useFonts({
-        BebasNeue_400Regular,
-    });
-
-    if (!fontsLoaded) {
-        return null;
-    }
+  if (!fontsLoaded) { return null; }
 
 
   const handleSignup = async () => {
@@ -63,25 +49,28 @@ export default function SignupScreen() {
       return;
     }
 
+    setLoading(true);
     try {
       await register(email.trim(), password);
-      } catch (error) {
-          const apiErr = error as ApiError;
-          setError(apiErr.message || "Signup failed. Please try again.");
-      }finally{
-        setLoading(false);
-      }
+    } catch (error) {
+      const apiErr = error as ApiError;
+      setError(apiErr.message || "Signup failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    
-   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sign Up</Text>
+  }
 
-      <View style={styles.inputContainer}>
+  return (
+    <View style={s.container}>
+      
+      <Text style={s.title}>Join ChangeNow</Text>
+      <Text style={s.subtitle}>Create your account to get started</Text>
+
+      <View style={s.inputContainer}>
         <TextInput
-          style={styles.input}
+          style={s.input}
           placeholder="Email"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -89,18 +78,18 @@ export default function SignupScreen() {
           editable={!loading}
         />
         <TextInput
-          style={styles.input}
+          style={s.input}
           placeholder="Password"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           editable={!loading}
         />
         <TextInput
-          style={styles.input}
+          style={[s.input, { marginBottom: 0 }]}
           placeholder="Confirm Password"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
@@ -108,15 +97,14 @@ export default function SignupScreen() {
         />
       </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={s.errorText}>{error}</Text> : null}
 
       <Animated.View style={{ transform: [{ scale: signupScaleAnim }] }}>
         <Pressable
           style={({ pressed }) => [
-            styles.signupButton,
-            signupHovered && styles.signupButtonHovered,
-            pressed && styles.signupButtonHovered,
-            loading && styles.buttonDisabled,
+            s.primaryButton,
+            (signupHovered || pressed) && s.primaryButtonPressed,
+            loading && s.buttonDisabled,
           ]}
           onPress={handleSignup}
           onPressIn={() => {
@@ -129,79 +117,88 @@ export default function SignupScreen() {
           onHoverOut={() => setSignupHovered(false)}
           disabled={loading}
         >
-          <Text style={styles.signupButtonText}>
+          <Text style={s.primaryButtonText}>
             {loading ? "Creating Account..." : "Create Account"}
           </Text>
         </Pressable>
       </Animated.View>
 
       <Pressable onPress={() => router.back()} disabled={loading}>
-        <Text style={styles.backLink}>Already have an account? Log in</Text>
+        <Text style={s.backLink}>Already have an account? Log in</Text>
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "flex-start",
+    justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#48494b",
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.lg,
   },
   title: {
-    fontSize: 48,
+    fontSize: fontSize.xxl,
     fontFamily: "BebasNeue_400Regular",
-    fontWeight: "bold",
-    margin: 40,
-    color: "#ffffff",
+    color: colors.primary,
+    letterSpacing: 2,
+  },
+  subtitle: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xl,
   },
   inputContainer: {
-    backgroundColor: "#616569",
-    borderRadius: 20,
-    padding: 20,
-    width: "80%",
-    marginBottom: 20,
+    backgroundColor: colors.bgCard,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    width: "100%",
+    maxWidth: 400,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: "#363636",
-    overflow: "hidden",
-    alignSelf: "center",
+    borderColor: colors.border,
   },
   input: {
-    backgroundColor: "#f5f5f5",
-    color: "#000000",
-    padding: 10,
-    marginBottom: 20,
+    backgroundColor: colors.bgInput,
+    color: colors.text,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     width: "100%",
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
+    fontSize: fontSize.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   errorText: {
-    color: "#ff4444",
-    fontSize: 14,
-    marginBottom: 12,
-    width: "80%",
+    color: colors.danger,
+    fontSize: fontSize.sm,
+    marginBottom: spacing.md,
     textAlign: "center",
   },
-  signupButton: {
-    backgroundColor: "#000000",
-    padding: 16,
-    width: 220,
+  primaryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: borderRadius.full,
+    marginTop: spacing.sm,
+    minWidth: 220,
     alignItems: "center",
-    borderRadius: 50,
-    marginTop: 10,
   },
-  signupButtonText: {
-    fontSize: 20,
+  primaryButtonPressed: { backgroundColor: colors.primaryDark },
+  primaryButtonText: {
+    fontSize: fontSize.lg,
     fontWeight: "bold",
     fontFamily: "BebasNeue_400Regular",
-    color: "#f5f5f5",
+    color: colors.text,
+    letterSpacing: 1,
   },
-  signupButtonHovered: { backgroundColor: "#222222" },
   buttonDisabled: { opacity: 0.6 },
   backLink: {
-    color: "#aaa",
-    marginTop: 20,
-    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    fontSize: fontSize.sm,
     textDecorationLine: "underline",
   },
 });

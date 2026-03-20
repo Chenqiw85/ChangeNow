@@ -7,9 +7,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
-	"changenow/api-go/internal/ai"
+	"changenow/api-go/internal/cache"
 	"changenow/api-go/internal/http/middleware"
+	"changenow/api-go/internal/logger"
+	"changenow/api-go/internal/metrics"
+	"changenow/api-go/internal/worker"
 )
 
 type generatePlanReq struct {
@@ -19,6 +23,7 @@ type generatePlanReq struct {
 	Constraints       string `json:"constraints"`
 	PromptVersion     string `json:"prompt_version"`
 	PreferredProvider string `json:"preferred_provider"`
+	UseAgent          bool   `json:"use_agent"`
 }
 
 func (h *Handlers) GeneratePlan(c *gin.Context) {
@@ -41,74 +46,61 @@ func (h *Handlers) GeneratePlan(c *gin.Context) {
 		req.Constraints = "none"
 	}
 
-	taskID := uuid.New()
-	planID := uuid.New()
-	now := time.Now()
+	// Check cache first
+	cacheKey := cache.PlanCacheKey(uid, req.Goal, req.DaysPerWeek, req.Equipment, req.Constraints, req.PromptVersion)
+	if h.cache != nil {
+		if cached, err := h.cache.GetCachedPlan(c.Request.Context(), cacheKey); err == nil && cached != nil {
+			metrics.CacheHits.WithLabelValues("hit").Inc()
+			c.Data(http.StatusOK, "application/json", cached)
+			return
+		}
+		metrics.CacheHits.WithLabelValues("miss").Inc()
+	}
 
-	// 1. Insert task as "running"
+	taskID := uuid.New()
+	requestID := c.GetString(middleware.RequestIDKey)
+
+	// 1. Insert task as "pending"
 	_, err := h.db.Exec(context.Background(),
-		`INSERT INTO tasks(id, user_id, status, created_at, started_at)
-		 VALUES ($1, $2, 'running', $3, $3)`,
-		taskID, uid, now,
+		`INSERT INTO tasks(id, user_id, status, created_at)
+		 VALUES ($1, $2, 'pending', $3)`,
+		taskID, uid, time.Now(),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
 	}
 
-	// 2. Call Python AI service
-	aiResp, err := h.aiClient.Generate(c.Request.Context(), ai.GenerateRequest{
-		Goal:              req.Goal,
-		DaysPerWeek:       req.DaysPerWeek,
-		Equipment:         req.Equipment,
-		Constraints:       req.Constraints,
-		PromptVersion:     req.PromptVersion,
-		PreferredProvider: req.PreferredProvider,
-	})
+	// 2. Enqueue task to Asynq
+	payload := worker.PlanGeneratePayload{
+		TaskID:        taskID.String(),
+		UserID:        uid,
+		Goal:          req.Goal,
+		DaysPerWeek:   req.DaysPerWeek,
+		Equipment:     req.Equipment,
+		Constraints:   req.Constraints,
+		PromptVersion: req.PromptVersion,
+		UseAgent:      req.UseAgent,
+		RequestID:     requestID,
+	}
 
+	task, err := worker.NewPlanGenerateTask(payload)
 	if err != nil {
-		// AI service failed — mark task as failed
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE tasks SET status='failed', error_message=$2, finished_at=$3 WHERE id=$1`,
-			taskID, err.Error(), time.Now(),
-		)
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error":   "AI service failed",
-			"detail":  err.Error(),
-			"task_id": taskID.String(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
 	}
 
-	// 3. Store plan in database
-	_, err = h.db.Exec(context.Background(),
-		`INSERT INTO plans(id, user_id, goal, days_per_week, equipment, constraints,
-		                   plan_text, prompt_version, pipeline_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		planID, uid, req.Goal, req.DaysPerWeek, req.Equipment, req.Constraints,
-		aiResp.PlanText, aiResp.PromptVersion,
-		aiResp.Provider+"/"+aiResp.Model, // e.g. "openai/gpt-4o"
-	)
+	_, err = h.queue.Enqueue(task)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save plan"})
+		logger.Log.Error("failed to enqueue task", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to enqueue task"})
 		return
 	}
 
-	// 4. Mark task as done
-	_, _ = h.db.Exec(context.Background(),
-		`UPDATE tasks SET status='done', plan_id=$2, finished_at=$3 WHERE id=$1`,
-		taskID, planID, time.Now(),
-	)
-
-	// 5. Return response
-	c.JSON(http.StatusOK, gin.H{
-		"task_id":        taskID.String(),
-		"plan_id":        planID.String(),
-		"status":         "done",
-		"provider":       aiResp.Provider,
-		"model":          aiResp.Model,
-		"prompt_version": aiResp.PromptVersion,
-		"total_tokens":   aiResp.TotalTokens,
-		"latency_ms":     aiResp.LatencyMs,
+	// 3. Return immediately with task ID
+	c.JSON(http.StatusAccepted, gin.H{
+		"task_id": taskID.String(),
+		"status":  "pending",
+		"message": "Plan generation started. Poll GET /v1/tasks/:id for status.",
 	})
 }

@@ -2,12 +2,11 @@
 import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, TextInput, Alert, StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { WorkoutLog, WorkoutSet, deleteSet, fetchExerciseHistory, logWorkout, } from "@/lib/exercises";
+import { WorkoutSet, deleteSet, fetchExerciseHistory, logWorkout, } from "@/lib/exercises";
 import { Dimensions } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { ApiError } from "@/lib/api";
 import { colors, spacing, fontSize, borderRadius } from "@/lib/theme";
-import { setItem } from "expo-secure-store";
 
 
 

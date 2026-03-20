@@ -18,6 +18,8 @@ from app.config import get_settings
 from app.llm.gateway import get_gateway
 from app.llm.models import LLMRequest, AllProvidersFailedError
 from app.prompts.manager import get_prompt_manager
+from app.agent.workflow import get_workflow
+from fastapi import FastAPI, HTTPException, Request
 
 
 # ── Logging ──────────────────────────────────────────────
@@ -164,3 +166,64 @@ async def raw_llm(req: RawLLMRequest):
         "tokens": response.total_tokens,
         "latency_ms": response.latency_ms,
     }
+
+@app.post("/v1/generate/agent", response_model=GeneratePlanResponse)
+async def generate_plan_agent(req: GeneratePlanRequest):
+    """
+    Generate a fitness plan using the multi-step Agent workflow.
+    
+    Pipeline: planner → reviewer → (optional reviser loop) → formatter
+    """
+    # 1. Build initial state from request
+    initial_state = {
+        "goal": req.goal,
+        "days_per_week": req.days_per_week,
+        "equipment": req.equipment or "full gym",
+        "constraints": req.constraints or "none",
+        "total_tokens": 0,
+        "revision_count": 0,
+    }
+
+    # 2. Run the agent workflow
+    workflow = get_workflow()
+    try:
+        result = await workflow.ainvoke(initial_state)
+    except Exception as e:
+        logger.error(f"Agent workflow failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Agent workflow failed: {str(e)}")
+
+    # 3. Check for errors
+    if result.get("error"):
+        logger.warning(f"Agent completed with warning: {result['error']}")
+
+    # 4. Return response
+    return GeneratePlanResponse(
+        plan_text=result.get("final_plan", result.get("draft_plan", "")),
+        provider=result.get("provider", "unknown"),
+        model=result.get("model", "unknown"),
+        prompt_version=req.prompt_version,
+        total_tokens=result.get("total_tokens", 0),
+        latency_ms=0,  # TODO: add total pipeline timing
+    )
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Extract or generate request ID, add to logs and response."""
+    request_id = request.headers.get("X-Request-ID", "")
+    if not request_id:
+        import uuid
+        request_id = str(uuid.uuid4())
+
+    # Store in request state so endpoints can access it
+    request.state.request_id = request_id
+
+    # Add to log context
+    logger.info(
+        "request started",
+        extra={"request_id": request_id, "method": request.method, "path": request.url.path},
+    )
+
+    response = await call_next(request)
+
+    response.headers["X-Request-ID"] = request_id
+
+    return response

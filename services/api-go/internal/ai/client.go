@@ -50,7 +50,7 @@ func NewClient(baseURL string) *Client {
 }
 
 // Generate calls the Python AI service to produce a fitness plan.
-func (c *Client) Generate(ctx context.Context, req GenerateRequest) (*GenerateResponse, error) {
+func (c *Client) Generate(ctx context.Context, req GenerateRequest,requestID string) (*GenerateResponse, error) {
 	// 1. Serialize request to JSON
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -64,6 +64,9 @@ func (c *Client) Generate(ctx context.Context, req GenerateRequest) (*GenerateRe
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if requestID != "" {
+		httpReq.Header.Set("X-Request-ID", requestID)
+	}
 
 	// 3. Send request
 	httpResp, err := c.httpClient.Do(httpReq)
@@ -111,4 +114,47 @@ func (c *Client) Health(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+
+// GenerateWithAgent calls the multi-step Agent workflow endpoint.
+// This is slower but produces higher quality plans (review + revision loop).
+func (c *Client) GenerateWithAgent(ctx context.Context, req GenerateRequest,requestID string) (*GenerateResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := c.baseURL + "/v1/generate/agent"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	if requestID != "" {
+		httpReq.Header.Set("X-Request-ID", requestID)
+	}
+
+	httpResp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request to AI service: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	respBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AI service returned %d: %s", httpResp.StatusCode, string(respBody))
+	}
+
+	var resp GenerateResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
 }
