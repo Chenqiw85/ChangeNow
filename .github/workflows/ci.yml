@@ -8,12 +8,39 @@ on:
 
 jobs:
   # ── Go API Tests ─────────────────────────────────
-  go-build:
-    name: Go Build & Vet
+  go-test:
+    name: Go Build, Vet & Test
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/api-go
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: changenow_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U test -d changenow_test"
+          --health-interval=2s
+          --health-timeout=2s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=2s
+          --health-retries=20
+
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:55432/changenow_test?sslmode=disable
+      TEST_REDIS_URL: redis://localhost:56379/0
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +48,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations
+        run: |
+          for f in migrations/*.sql; do
+            echo "applying $f"
+            psql "$TEST_DATABASE_URL" -f "$f"
+          done
 
       - name: Download dependencies
         run: go mod download
@@ -34,6 +71,9 @@ jobs:
 
       - name: Build Worker
         run: go build -o /dev/null ./cmd/worker
+
+      - name: Test (race)
+        run: go test -race ./...
 
   # ── Python AI Service Tests ──────────────────────
   python-check:
@@ -61,7 +101,7 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [go-build, python-check]
+    needs: [go-test, python-check]
 
     steps:
       - uses: actions/checkout@v4
