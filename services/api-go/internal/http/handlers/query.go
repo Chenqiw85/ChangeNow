@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +18,7 @@ func (h *Handlers) GetTask(c *gin.Context) {
 	var planID *uuid.UUID
 	var errMsg *string
 
-	err = h.db.QueryRow(context.Background(),
+	err = h.db.QueryRow(c.Request.Context(),
 		`select status, plan_id, error_message from tasks where id=$1`, id,
 	).Scan(&status, &planID, &errMsg)
 
@@ -46,7 +45,7 @@ func (h *Handlers) GetPlan(c *gin.Context) {
 	}
 
 	var text string
-	err = h.db.QueryRow(context.Background(),
+	err = h.db.QueryRow(c.Request.Context(),
 		`select plan_text from plans where id=$1`, id,
 	).Scan(&text)
 	if err != nil {

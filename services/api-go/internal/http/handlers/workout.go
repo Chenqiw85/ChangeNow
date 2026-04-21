@@ -1,16 +1,16 @@
 package handlers
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"changenow/api-go/internal/http/middleware"
+	"changenow/api-go/internal/logger"
 )
 
 // ─── Request 结构体 ─────────────────────────────────
@@ -148,7 +148,7 @@ func (h *Handlers) GetExerciseHistory(c *gin.Context) {
 	exerciseID := c.Param("id")
 
 	// 1. 查这个 exercise 下所有的 workout_logs
-	rows, err := h.db.Query(context.Background(),
+	rows, err := h.db.Query(c.Request.Context(),
 		`SELECT ws.workout_log_id, ws.exercise_id, e.name, e.type, ws.created_at,ws.id, ws.set_number, ws.weight,ws.reps
 		 FROM workout_sets ws
 		 JOIN exercises e ON e.id = ws.exercise_id
@@ -173,6 +173,7 @@ func (h *Handlers) GetExerciseHistory(c *gin.Context) {
 			group        setResp
 		)
 		if err := rows.Scan(&workoutLogID, &group.ExerciseID, &group.ExerciseName, &group.ExerciseType, &group.CreatedAt, &set.ID, &set.SetNumber, &set.Weight, &set.Reps); err != nil {
+			logger.Log.Warn("scan exercise history row", zap.Int64("user_id", uid), zap.Error(err))
 			continue
 		}
 		if current == nil || current.WorkoutID != workoutLogID {
@@ -198,8 +199,7 @@ func (h *Handlers) GetExerciseHistory(c *gin.Context) {
 func (h *Handlers) GetDailyExercisesHistory(c *gin.Context) {
 	uid := c.GetInt64(middleware.CtxUserIDKey)
 
-	// 1. 查这个 exercise 下所有的 workout_logs
-	rows, err := h.db.Query(context.Background(),
+	rows, err := h.db.Query(c.Request.Context(),
 		`SELECT wl.id, wl.performed_at, wl.notes, wl.volume, wl.calories
 		 FROM workout_logs wl
 		 WHERE wl.user_id = $1
@@ -207,7 +207,6 @@ func (h *Handlers) GetDailyExercisesHistory(c *gin.Context) {
 		 LIMIT 20`,
 		uid,
 	)
-	fmt.Print(err)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query history"})
 		return
@@ -216,11 +215,12 @@ func (h *Handlers) GetDailyExercisesHistory(c *gin.Context) {
 
 	logs := []workoutLogResp{}
 	for rows.Next() {
-		var log workoutLogResp
-		if err := rows.Scan(&log.ID, &log.PerformedAt, &log.Notes, &log.Volume, &log.Calories); err != nil {
+		var wl workoutLogResp
+		if err := rows.Scan(&wl.ID, &wl.PerformedAt, &wl.Notes, &wl.Volume, &wl.Calories); err != nil {
+			logger.Log.Warn("scan daily history row", zap.Int64("user_id", uid), zap.Error(err))
 			continue
 		}
-		logs = append(logs, log)
+		logs = append(logs, wl)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"history": logs})
@@ -230,8 +230,7 @@ func (h *Handlers) GetDailyExercisesDetails(c *gin.Context) {
 	uid := c.GetInt64(middleware.CtxUserIDKey)
 	workoutID := c.Param("id")
 
-	// 1. 查这个 exercise 下所有的 workout_logs
-	rows, err := h.db.Query(context.Background(),
+	rows, err := h.db.Query(c.Request.Context(),
 		`SELECT ws.workout_log_id, ws.exercise_id, e.name, e.type, ws.created_at,ws.id, ws.set_number, ws.weight,ws.reps
 		 FROM workout_sets ws
 		 JOIN exercises e ON e.id = ws.exercise_id
@@ -256,6 +255,7 @@ func (h *Handlers) GetDailyExercisesDetails(c *gin.Context) {
 			group      setResp
 		)
 		if err := rows.Scan(&group.WorkoutID, &exerciseID, &group.ExerciseName, &group.ExerciseType, &group.CreatedAt, &set.ID, &set.SetNumber, &set.Weight, &set.Reps); err != nil {
+			logger.Log.Warn("scan daily details row", zap.Int64("user_id", uid), zap.Error(err))
 			continue
 		}
 		if current == nil || current.ExerciseID != exerciseID {

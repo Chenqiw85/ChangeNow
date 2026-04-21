@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -61,7 +60,7 @@ func (h *Handlers) GeneratePlan(c *gin.Context) {
 	requestID := c.GetString(middleware.RequestIDKey)
 
 	// 1. Insert task as "pending"
-	_, err := h.db.Exec(context.Background(),
+	_, err := h.db.Exec(c.Request.Context(),
 		`INSERT INTO tasks(id, user_id, status, created_at)
 		 VALUES ($1, $2, 'pending', $3)`,
 		taskID, uid, time.Now(),

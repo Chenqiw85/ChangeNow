@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"changenow/api-go/internal/http/middleware"
+	"changenow/api-go/internal/logger"
 )
 
 // ─── Request / Response 结构体 ──────────────────────
@@ -34,7 +35,7 @@ func (h *Handlers) ListExercises(c *gin.Context) {
 	// 从 JWT middleware 里拿到当前用户ID
 	uid := c.GetInt64(middleware.CtxUserIDKey)
 
-	rows, err := h.db.Query(context.Background(),
+	rows, err := h.db.Query(c.Request.Context(),
 		`SELECT id, name, type, description, created_at
 		 FROM exercises
 		 WHERE user_id = $1
@@ -52,7 +53,9 @@ func (h *Handlers) ListExercises(c *gin.Context) {
 	for rows.Next() {
 		var e exerciseResp
 		if err := rows.Scan(&e.ID, &e.Name, &e.Type, &e.Description, &e.CreatedAt); err != nil {
-			continue // 跳过有问题的行，不要因为一行坏数据整个请求失败
+			// 跳过有问题的行，但记一条日志方便排查
+			logger.Log.Warn("scan exercise row", zap.Int64("user_id", uid), zap.Error(err))
+			continue
 		}
 		exercises = append(exercises, e)
 	}
@@ -78,7 +81,7 @@ func (h *Handlers) CreateExercise(c *gin.Context) {
 
 	var id int64
 	var createdAt time.Time
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(c.Request.Context(),
 		`INSERT INTO exercises (user_id, name, type, description)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, created_at`,
@@ -107,7 +110,7 @@ func (h *Handlers) DeleteExercise(c *gin.Context) {
 	exerciseID := c.Param("id")
 
 	// WHERE 里加 user_id 确保用户只能删自己的
-	result, err := h.db.Exec(context.Background(),
+	result, err := h.db.Exec(c.Request.Context(),
 		`DELETE FROM exercises WHERE id = $1 AND user_id = $2`,
 		exerciseID, uid,
 	)
