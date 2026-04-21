@@ -99,3 +99,45 @@ func TestLogWorkout_SameDay_AppendsToSameLog(t *testing.T) {
 		t.Fatalf("volume: got %v want %v", volume, want)
 	}
 }
+
+func TestLogWorkout_SetNumbers_AreServerAssigned(t *testing.T) {
+	r, h, _, exid := newWorkoutRouter(t)
+
+	// Client sends nonsense set_number values; server should ignore them.
+	if w := postWorkout(t, r, map[string]any{"exercise_id": exid, "sets": []map[string]any{
+		{"set_number": 999, "weight": 100.0, "reps": 5},
+		{"set_number": 0, "weight": 100.0, "reps": 5},
+	}}); w.Code != http.StatusCreated {
+		t.Fatalf("first post: got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if w := postWorkout(t, r, map[string]any{"exercise_id": exid, "sets": []map[string]any{
+		{"set_number": 1, "weight": 105.0, "reps": 5},
+	}}); w.Code != http.StatusCreated {
+		t.Fatalf("second post: got %d (body=%s)", w.Code, w.Body.String())
+	}
+
+	rows, err := h.db.Query(context.Background(),
+		`SELECT set_number FROM workout_sets WHERE exercise_id=$1 ORDER BY id`, exid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	got := []int{}
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, n)
+	}
+	want := []int{1, 2, 3}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+}

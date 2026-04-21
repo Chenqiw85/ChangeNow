@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 
 	"changenow/api-go/internal/http/middleware"
 )
@@ -23,9 +22,10 @@ type logWorkoutReq struct {
 }
 
 type setReq struct {
-	SetNumber int     `json:"set_number" binding:"required"`
-	Weight    float64 `json:"weight" binding:"required"`
-	Reps      int     `json:"reps" binding:"required"`
+	// SetNumber is ignored from the request body — the server assigns
+	// set_number relative to what's already stored for (workout_log, exercise).
+	Weight float64 `json:"weight" binding:"required"`
+	Reps   int     `json:"reps"   binding:"required"`
 }
 
 // ─── Response 结构体 ────────────────────────────────
@@ -105,35 +105,33 @@ func (h *Handlers) LogWorkout(c *gin.Context) {
 		return
 	}
 
-	// 2. 插入每一组
-
-	var set_num int
-	err = tx.QueryRow(context.Background(), `
-	SELECT set_number
-	FROM workout_sets
-	WHERE workout_log_id = $1 AND exercise_id = $2
-	ORDER BY set_number DESC
-	LIMIT 1`,
-		logID, req.ExerciseID).Scan(&set_num)
-	if err == pgx.ErrNoRows {
-		set_num = 0
+	// 2. Compute starting set_number for this (log, exercise) so the sequence
+	// stays 1..N regardless of what the client sent.
+	var startNum int
+	err = tx.QueryRow(c.Request.Context(),
+		`SELECT COALESCE(MAX(set_number), 0)
+		 FROM workout_sets
+		 WHERE workout_log_id = $1 AND exercise_id = $2`,
+		logID, req.ExerciseID,
+	).Scan(&startNum)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to compute set number"})
+		return
 	}
 
-	for _, s := range req.Sets {
-
-		_, err = tx.Exec(context.Background(),
+	for i, s := range req.Sets {
+		_, err = tx.Exec(c.Request.Context(),
 			`INSERT INTO workout_sets (workout_log_id, exercise_id, set_number, weight, reps)
 			 VALUES ($1, $2, $3, $4, $5)`,
-			logID, req.ExerciseID, s.SetNumber+set_num, s.Weight, s.Reps,
+			logID, req.ExerciseID, startNum+i+1, s.Weight, s.Reps,
 		)
 		if err != nil {
-			fmt.Print(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to insert set"})
 			return
 		}
 	}
 
-	if err = tx.Commit(context.Background()); err != nil {
+	if err = tx.Commit(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit"})
 		return
 	}
