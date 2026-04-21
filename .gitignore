@@ -31,8 +31,13 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
 backend/.env
+services/api-go/.env
+services/ai-py/.env
 # typescript
 *.tsbuildinfo
 

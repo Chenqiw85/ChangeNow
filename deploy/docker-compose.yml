@@ -48,9 +48,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    env_file:
+      - ../services/api-go/.env
     environment:
       - DATABASE_URL=postgres://app:app@postgres:5432/changenow?sslmode=disable
-      - JWT_SECRET=change_me_in_production
       - AI_SERVICE_URL=http://ai-service:8001
       - PORT=8080
       - REDIS_URL=redis://redis:6379/0

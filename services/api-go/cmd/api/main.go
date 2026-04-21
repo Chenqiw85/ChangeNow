@@ -23,12 +23,16 @@ import (
 	"changenow/api-go/internal/logger"
 )
 
-func main()  {
-	_ = godotenv.Load();
+func main() {
+	_ = godotenv.Load()
 
 	// ── Logger ──────────────────────────────────────
 	logger.Init()
 	defer logger.Sync()
+
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Fatal("JWT_SECRET is empty")
+	}
 
 	//Database
 	dbURL := os.Getenv("DATABASE_URL")
@@ -37,8 +41,8 @@ func main()  {
 		log.Fatal("DATABASE_URL is empty")
 	}
 
-	pool, err := pgxpool.New(context.TODO(),dbURL)
-	if err!= nil{
+	pool, err := pgxpool.New(context.TODO(), dbURL)
+	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
@@ -92,7 +96,6 @@ func main()  {
 		port = "8080"
 	}
 
-	logger.Log.Info("API starting", zap.String("port", port))
 	// ── Graceful Shutdown ───────────────────────────
 	srv := &http2.Server{
 		Addr:    ":" + port,
