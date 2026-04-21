@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"changenow/api-go/internal/ai"
+	"changenow/api-go/internal/cache"
 	"changenow/api-go/internal/logger"
 	"changenow/api-go/internal/metrics"
 )
@@ -20,10 +21,11 @@ import (
 type PlanHandler struct {
 	db       *pgxpool.Pool
 	aiClient *ai.Client
+	cache    *cache.RedisClient
 }
 
-func NewPlanHandler(db *pgxpool.Pool, aiClient *ai.Client) *PlanHandler {
-	return &PlanHandler{db: db, aiClient: aiClient}
+func NewPlanHandler(db *pgxpool.Pool, aiClient *ai.Client, rc *cache.RedisClient) *PlanHandler {
+	return &PlanHandler{db: db, aiClient: aiClient, cache: rc}
 }
 
 // HandlePlanGenerate is called by Asynq when a plan:generate task is dequeued.
@@ -94,6 +96,23 @@ func (h *PlanHandler) HandlePlanGenerate(ctx context.Context, t *asynq.Task) err
 	)
 	if err != nil {
 		return fmt.Errorf("save plan to database: %w", err)
+	}
+
+	// 4b. Warm the plan cache so subsequent /plans/generate requests with the
+	// same inputs can short-circuit without a full LLM round-trip. Best effort:
+	// a cache failure must not fail the task.
+	if h.cache != nil {
+		key := cache.PlanCacheKey(payload.UserID, payload.Goal, payload.DaysPerWeek,
+			payload.Equipment, payload.Constraints, payload.PromptVersion)
+		body, err := json.Marshal(map[string]string{
+			"id":        planID.String(),
+			"plan_text": aiResp.PlanText,
+		})
+		if err != nil {
+			logger.Log.Warn("worker: marshal cache entry", zap.Error(err))
+		} else if err := h.cache.SetCachedPlan(ctx, key, body, 24*time.Hour); err != nil {
+			logger.Log.Warn("worker: write plan cache", zap.Error(err))
+		}
 	}
 
 	// 5. Mark task as done

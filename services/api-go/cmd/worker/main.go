@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"changenow/api-go/internal/ai"
+	"changenow/api-go/internal/cache"
 	"changenow/api-go/internal/logger"
 	"changenow/api-go/internal/worker"
 )
@@ -51,6 +52,12 @@ func main() {
 		log.Fatalf("invalid REDIS_URL: %v", err)
 	}
 
+	rc, err := cache.NewRedisClient(redisURL)
+	if err != nil {
+		log.Fatalf("redis for worker cache: %v", err)
+	}
+	defer rc.Close()
+
 	srv := asynq.NewServer(redisOpt, asynq.Config{
 		Concurrency: 5, // process up to 5 tasks simultaneously
 		Queues: map[string]int{
@@ -60,7 +67,7 @@ func main() {
 
 	// Register task handlers
 	mux := asynq.NewServeMux()
-	planHandler := worker.NewPlanHandler(pool, aiClient)
+	planHandler := worker.NewPlanHandler(pool, aiClient, rc)
 	mux.HandleFunc(worker.TypePlanGenerate, planHandler.HandlePlanGenerate)
 
 	logger.Log.Info("Worker starting, waiting for tasks...")
