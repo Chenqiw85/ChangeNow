@@ -9,10 +9,10 @@ import (
 )
 
 type Handlers struct {
-  db *pgxpool.Pool
-  aiClient *ai.Client 
-  cache    *cache.RedisClient
-  queue    *asynq.Client
+	db       *pgxpool.Pool
+	aiClient *ai.Client
+	cache    *cache.RedisClient
+	queue    *asynq.Client
 }
 
 func New(db *pgxpool.Pool, aiClient *ai.Client, cache *cache.RedisClient, queue *asynq.Client) *Handlers {

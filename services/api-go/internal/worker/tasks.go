@@ -35,8 +35,8 @@ func NewPlanGenerateTask(payload PlanGeneratePayload) (*asynq.Task, error) {
 	return asynq.NewTask(
 		TypePlanGenerate,
 		data,
-		asynq.MaxRetry(3),              // retry up to 3 times on failure
-		asynq.Timeout(120*1e9),         // 120 second timeout (nanoseconds)
-		asynq.Queue("default"),         // queue name
+		asynq.MaxRetry(3),      // retry up to 3 times on failure
+		asynq.Timeout(120*1e9), // 120 second timeout (nanoseconds)
+		asynq.Queue("default"), // queue name
 	), nil
 }

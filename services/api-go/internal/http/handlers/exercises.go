@@ -21,10 +21,10 @@ type createExerciseReq struct {
 
 // 返回给前端的训练动作数据
 type exerciseResp struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Type        string    `json:"type"`
+	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

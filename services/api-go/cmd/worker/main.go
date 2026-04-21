@@ -52,7 +52,7 @@ func main() {
 	}
 
 	srv := asynq.NewServer(redisOpt, asynq.Config{
-		Concurrency: 5,  // process up to 5 tasks simultaneously
+		Concurrency: 5, // process up to 5 tasks simultaneously
 		Queues: map[string]int{
 			"default": 10, // priority weight
 		},

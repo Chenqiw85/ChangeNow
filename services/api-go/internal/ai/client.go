@@ -50,7 +50,7 @@ func NewClient(baseURL string) *Client {
 }
 
 // Generate calls the Python AI service to produce a fitness plan.
-func (c *Client) Generate(ctx context.Context, req GenerateRequest,requestID string) (*GenerateResponse, error) {
+func (c *Client) Generate(ctx context.Context, req GenerateRequest, requestID string) (*GenerateResponse, error) {
 	// 1. Serialize request to JSON
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -116,10 +116,9 @@ func (c *Client) Health(ctx context.Context) error {
 	return nil
 }
 
-
 // GenerateWithAgent calls the multi-step Agent workflow endpoint.
 // This is slower but produces higher quality plans (review + revision loop).
-func (c *Client) GenerateWithAgent(ctx context.Context, req GenerateRequest,requestID string) (*GenerateResponse, error) {
+func (c *Client) GenerateWithAgent(ctx context.Context, req GenerateRequest, requestID string) (*GenerateResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)

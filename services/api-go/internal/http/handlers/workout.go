@@ -54,7 +54,6 @@ type setItem struct {
 	Reps      int     `json:"reps"`
 }
 
-
 // ─── record exercise ────────────────────────────────────
 // POST /v1/workouts
 func (h *Handlers) LogWorkout(c *gin.Context) {
@@ -131,7 +130,7 @@ func (h *Handlers) LogWorkout(c *gin.Context) {
 	WHERE workout_log_id = $1 AND exercise_id = $2
 	ORDER BY set_number DESC
 	LIMIT 1`,
-		logID,req.ExerciseID).Scan(&set_num)
+		logID, req.ExerciseID).Scan(&set_num)
 	if err == pgx.ErrNoRows {
 		set_num = 0
 	}
@@ -243,7 +242,6 @@ func (h *Handlers) GetDailyExercisesHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"history": logs})
 }
 
-
 func (h *Handlers) GetDailyExercisesDetails(c *gin.Context) {
 	uid := c.GetInt64(middleware.CtxUserIDKey)
 	workoutID := c.Param("id")
@@ -269,15 +267,14 @@ func (h *Handlers) GetDailyExercisesDetails(c *gin.Context) {
 	var current *setResp
 	for rows.Next() {
 		var (
-			set          setItem
+			set        setItem
 			exerciseID int64
-			group        setResp
+			group      setResp
 		)
-		if err := rows.Scan(&group.WorkoutID, &exerciseID, &group.ExerciseName, &group.ExerciseType, &group.CreatedAt, &set.ID, &set.SetNumber, &set.Weight, &set.Reps);
-		 err != nil {
+		if err := rows.Scan(&group.WorkoutID, &exerciseID, &group.ExerciseName, &group.ExerciseType, &group.CreatedAt, &set.ID, &set.SetNumber, &set.Weight, &set.Reps); err != nil {
 			continue
 		}
-		if current == nil || current.ExerciseID !=  exerciseID{
+		if current == nil || current.ExerciseID != exerciseID {
 			history = append(history, setResp{
 				WorkoutID:    group.WorkoutID,
 				ExerciseID:   exerciseID,
