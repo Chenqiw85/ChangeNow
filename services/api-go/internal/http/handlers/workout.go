@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 
 	"changenow/api-go/internal/http/middleware"
 )
@@ -277,35 +279,34 @@ func (h *Handlers) DeleteSet(c *gin.Context) {
 	uid := c.GetInt64(middleware.CtxUserIDKey)
 	setID := c.Param("id")
 
-	// WHERE 里加 user_id 确保用户只能删自己的
-	result, err := h.db.Exec(context.Background(),
+	// RETURNING lets us scope the volume recompute below to the one affected
+	// log instead of every log this user has ever recorded.
+	var logID int64
+	err := h.db.QueryRow(c.Request.Context(),
 		`DELETE FROM workout_sets ws
-     USING workout_logs wl
-     WHERE ws.workout_log_id = wl.id
-       AND ws.id = $1
-       AND wl.user_id = $2`,
+		 USING workout_logs wl
+		 WHERE ws.workout_log_id = wl.id
+		   AND ws.id = $1
+		   AND wl.user_id = $2
+		 RETURNING ws.workout_log_id`,
 		setID, uid,
-	)
-
+	).Scan(&logID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "set not found"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete"})
 		return
 	}
 
-	if result.RowsAffected() == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "set not found"})
-		return
-	}
-
-	_, err = h.db.Exec(context.Background(),
-		`UPDATE workout_logs wl
+	_, err = h.db.Exec(c.Request.Context(),
+		`UPDATE workout_logs
 		 SET volume = COALESCE((
-			 SELECT SUM(ws.weight * ws.reps)
-			 FROM workout_sets ws
-			 WHERE ws.workout_log_id = wl.id
+		     SELECT SUM(weight * reps) FROM workout_sets WHERE workout_log_id = $1
 		 ), 0)
-		 WHERE wl.user_id = $1`,
-		uid,
+		 WHERE id = $1`,
+		logID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update volume"})

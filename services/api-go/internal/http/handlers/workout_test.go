@@ -141,3 +141,52 @@ func TestLogWorkout_SetNumbers_AreServerAssigned(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteSet_RecomputesOnlyOwningLog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	pool := testutil.PGPool(t)
+	h := New(pool, nil, nil, nil)
+	uid := seedUser(t, h)
+	exid := seedExercise(t, h, uid)
+
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(context.Background(), q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustExec(`INSERT INTO workout_logs(id,user_id,performed_at,volume)
+	          VALUES (1,$1,CURRENT_DATE - INTERVAL '1 day', 200),
+	                 (2,$1,CURRENT_DATE, 300)`, uid)
+	mustExec(`INSERT INTO workout_sets(id,workout_log_id,exercise_id,set_number,weight,reps)
+	          VALUES (1,1,$1,1,50,2), (2,1,$1,2,50,2),
+	                 (3,2,$1,1,60,2), (4,2,$1,2,90,2)`, exid)
+
+	r := gin.New()
+	r.DELETE("/workouts/:id", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDKey, uid)
+		h.DeleteSet(c)
+	})
+	req := httptest.NewRequest(http.MethodDelete, "/workouts/3", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var v1, v2 float64
+	if err := pool.QueryRow(context.Background(),
+		`SELECT volume FROM workout_logs WHERE id=1`).Scan(&v1); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(),
+		`SELECT volume FROM workout_logs WHERE id=2`).Scan(&v2); err != nil {
+		t.Fatal(err)
+	}
+	if v1 != 200 {
+		t.Fatalf("log 1 volume changed: %v (expected untouched 200)", v1)
+	}
+	if v2 != 180 {
+		t.Fatalf("log 2 volume: got %v want 180", v2)
+	}
+}
