@@ -72,7 +72,7 @@ func (h *Handlers) LogWorkout(c *gin.Context) {
 	}
 
 	var ownerID int64
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(c.Request.Context(),
 		`SELECT user_id FROM exercises WHERE id = $1`, req.ExerciseID,
 	).Scan(&ownerID)
 	if err != nil || ownerID != uid {
@@ -80,45 +80,29 @@ func (h *Handlers) LogWorkout(c *gin.Context) {
 		return
 	}
 
-	createdAt := time.Now()
-
-	// 开始事务 — workout_log 和 workout_sets 要么全成功要么全失败
-	tx, err := h.db.Begin(context.Background())
+	// workout_log 和 workout_sets 要么全成功要么全失败
+	tx, err := h.db.Begin(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
 		return
 	}
-	defer tx.Rollback(context.Background()) // 如果没 commit 会自动 rollback
+	defer tx.Rollback(c.Request.Context()) // 如果没 commit 会自动 rollback
 
-	// 1. workout_log
+	// 1. Upsert the workout_log row for today. One log per user per day
+	// (enforced by the workout_logs_user_day_unique constraint, migration 003).
 	var logID int64
-	var existingVolume float64
-
-	err = tx.QueryRow(context.Background(),
-		`select id, volume
-	 from workout_logs
-	 where performed_at = $1 and user_id = $2`,
-		createdAt, uid).Scan(&logID, &existingVolume)
-
+	err = tx.QueryRow(c.Request.Context(),
+		`INSERT INTO workout_logs (user_id, performed_at, volume, notes)
+		 VALUES ($1, CURRENT_DATE, $2, $3)
+		 ON CONFLICT (user_id, performed_at) DO UPDATE
+		 SET volume = workout_logs.volume + EXCLUDED.volume,
+		     notes  = CASE WHEN EXCLUDED.notes <> '' THEN EXCLUDED.notes ELSE workout_logs.notes END
+		 RETURNING id`,
+		uid, totalVolume, req.Notes,
+	).Scan(&logID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			err = tx.QueryRow(context.Background(),
-				`INSERT INTO workout_logs (user_id, performed_at, volume,notes)
-			 VALUES ($1, $2, $3, $4)
-			 RETURNING id`,
-				uid, createdAt, totalVolume, req.Notes,
-			).Scan(&logID)
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database fail"})
-			return
-		}
-	} else {
-		err = tx.QueryRow(context.Background(),
-			`UPDATE workout_logs
-		SET volume = $1
-		WHERE performed_at = $2 AND id = $3
-		RETURNING id`,
-			existingVolume+totalVolume, createdAt, logID).Scan(&logID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upsert workout log"})
+		return
 	}
 
 	// 2. 插入每一组
