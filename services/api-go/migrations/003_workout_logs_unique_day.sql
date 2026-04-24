@@ -47,7 +47,18 @@ WHERE wl.user_id = c.user_id
   AND wl.performed_at = c.performed_at
   AND wl.id <> c.keep_id;
 
-ALTER TABLE workout_logs
-    ADD CONSTRAINT workout_logs_user_day_unique UNIQUE (user_id, performed_at);
+-- Idempotent: the runner may re-apply this file against a DB where the
+-- constraint was added manually before schema_migrations existed.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'workout_logs_user_day_unique'
+    ) THEN
+        ALTER TABLE workout_logs
+            ADD CONSTRAINT workout_logs_user_day_unique UNIQUE (user_id, performed_at);
+    END IF;
+END$$;
 
 COMMIT;

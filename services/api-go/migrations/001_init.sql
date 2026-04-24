@@ -7,7 +7,14 @@ create table if not exists users(
 );
 
 --task
-create type task_status as enum('pending','running','done','failed');
+-- Wrapped so re-apply against a DB that already has the type is a no-op
+-- (Postgres has no CREATE TYPE ... IF NOT EXISTS).
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'task_status') THEN
+        CREATE TYPE task_status AS ENUM('pending','running','done','failed');
+    END IF;
+END$$;
 
 create table if not exists tasks(
     id uuid primary key,

@@ -19,6 +19,7 @@ import (
 
 	"changenow/api-go/internal/ai"
 	"changenow/api-go/internal/cache"
+	"changenow/api-go/internal/db"
 	"changenow/api-go/internal/http"
 	"changenow/api-go/internal/logger"
 )
@@ -46,6 +47,10 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+
+	if err := db.Run(context.Background(), pool); err != nil {
+		log.Fatalf("apply migrations: %v", err)
+	}
 
 	// ── Redis ───────────────────────────────────────
 	redisURL := os.Getenv("REDIS_URL")
