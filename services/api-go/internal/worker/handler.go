@@ -103,7 +103,7 @@ func (h *PlanHandler) HandlePlanGenerate(ctx context.Context, t *asynq.Task) err
 	// a cache failure must not fail the task.
 	if h.cache != nil {
 		key := cache.PlanCacheKey(payload.UserID, payload.Goal, payload.DaysPerWeek,
-			payload.Equipment, payload.Constraints, payload.PromptVersion)
+			payload.Equipment, payload.Constraints, payload.PromptVersion, payload.UseAgent)
 		body, err := json.Marshal(map[string]string{
 			"id":        planID.String(),
 			"plan_text": aiResp.PlanText,

@@ -46,7 +46,7 @@ func (h *Handlers) GeneratePlan(c *gin.Context) {
 	}
 
 	// Check cache first
-	cacheKey := cache.PlanCacheKey(uid, req.Goal, req.DaysPerWeek, req.Equipment, req.Constraints, req.PromptVersion)
+	cacheKey := cache.PlanCacheKey(uid, req.Goal, req.DaysPerWeek, req.Equipment, req.Constraints, req.PromptVersion, req.UseAgent)
 	if h.cache != nil {
 		if cached, err := h.cache.GetCachedPlan(c.Request.Context(), cacheKey); err == nil && cached != nil {
 			metrics.CacheHits.WithLabelValues("hit").Inc()

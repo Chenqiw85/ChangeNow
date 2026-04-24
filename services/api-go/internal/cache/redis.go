@@ -43,9 +43,11 @@ func (r *RedisClient) Close() error {
 // ── Plan Cache ──────────────────────────────────────────
 
 // PlanCacheKey generates a deterministic cache key from plan parameters.
-// Same inputs always produce the same key.
-func PlanCacheKey(userID int64, goal string, daysPerWeek int, equipment, constraints, promptVersion string) string {
-	raw := fmt.Sprintf("plan:%d:%s:%d:%s:%s:%s", userID, goal, daysPerWeek, equipment, constraints, promptVersion)
+// Same inputs always produce the same key. useAgent is part of the key
+// because the agent workflow produces a different artifact than the plain
+// generator, so requests that differ only by that flag must not collide.
+func PlanCacheKey(userID int64, goal string, daysPerWeek int, equipment, constraints, promptVersion string, useAgent bool) string {
+	raw := fmt.Sprintf("plan:%d:%s:%d:%s:%s:%s:%t", userID, goal, daysPerWeek, equipment, constraints, promptVersion, useAgent)
 	hash := sha256.Sum256([]byte(raw))
 	return "plan_cache:" + hex.EncodeToString(hash[:16]) // first 16 bytes = 32 hex chars
 }
