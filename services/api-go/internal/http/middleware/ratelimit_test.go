@@ -54,6 +54,44 @@ func TestRateLimiterByIP_BlocksAfterLimit(t *testing.T) {
 	}
 }
 
+// A nil Redis client means Redis was unavailable at API startup; the middleware
+// must fail open rather than panic.
+func TestRateLimiterByIP_NilClientFailsOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(RateLimiterByIP(nil, 1, 1*time.Minute))
+	r.POST("/auth/login", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+		req.RemoteAddr = "10.0.0.9:1"
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("req %d: got %d want 200 (fail-open on nil redis)", i+1, w.Code)
+		}
+	}
+}
+
+func TestRateLimiter_NilClientFailsOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set(CtxUserIDKey, int64(42)); c.Next() })
+	r.Use(RateLimiter(nil, 1, 1*time.Minute))
+	r.GET("/ping", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("req %d: got %d want 200 (fail-open on nil redis)", i+1, w.Code)
+		}
+	}
+}
+
 func TestRateLimiterByIP_IsolatesDifferentIPs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rc := newRateLimitRedis(t)

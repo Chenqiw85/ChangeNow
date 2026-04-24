@@ -16,6 +16,13 @@ import (
 // window: sliding window duration
 func RateLimiter(redisClient *cache.RedisClient, limit int64, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Fail open when Redis is not configured — cmd/api leaves the client
+		// nil if REDIS_URL is unreachable at startup.
+		if redisClient == nil {
+			c.Next()
+			return
+		}
+
 		// Get user ID from JWT (set by AuthRequired middleware)
 		uid, exists := c.Get(CtxUserIDKey)
 		if !exists {
@@ -55,6 +62,14 @@ func RateLimiter(redisClient *cache.RedisClient, limit int64, window time.Durati
 // routes (e.g. /auth/register, /auth/login) where no user ID exists yet.
 func RateLimiterByIP(redisClient *cache.RedisClient, limit int64, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Fail open when Redis is not configured — cmd/api leaves the client
+		// nil if REDIS_URL is unreachable at startup. Without this guard the
+		// middleware would panic on every /auth/register or /auth/login.
+		if redisClient == nil {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 		if ip == "" {
 			c.Next()
